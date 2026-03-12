@@ -64,25 +64,6 @@
 
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 2rem; margin-bottom: 1.5rem; }
 
-    .notice {
-      background: rgba(255,123,0,0.06);
-      border: 1px solid rgba(255,123,0,0.2);
-      border-radius: 12px;
-      padding: 1.2rem 1.4rem;
-      margin-bottom: 1.5rem;
-    }
-
-    .notice-title { font-size: 0.78rem; font-weight: 700; color: var(--accent2); font-family: 'Space Mono', monospace; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
-    .notice p { font-size: 0.82rem; color: #aaa; line-height: 1.6; }
-    .notice a { color: var(--accent2); }
-    .notice code { background: rgba(255,255,255,0.07); padding: 0.1rem 0.4rem; border-radius: 4px; font-family: 'Space Mono', monospace; font-size: 0.78rem; color: var(--text); }
-
-    .config-row { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.8rem; }
-
-    .config-input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem 0.75rem; color: var(--text); font-family: 'Space Mono', monospace; font-size: 0.75rem; outline: none; }
-    .config-input:focus { border-color: var(--accent2); }
-    .config-label { font-size: 0.72rem; color: var(--muted); font-family: 'Space Mono', monospace; white-space: nowrap; }
-
     .url-row { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; }
 
     .url-input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 0.85rem 1rem; color: var(--text); font-family: 'Space Mono', monospace; font-size: 0.8rem; outline: none; transition: border-color 0.2s; }
@@ -151,17 +132,6 @@
     <p>Download YouTube videos as MP3, M4A, or MP4.</p>
   </header>
 
-  <div class="notice">
-    <div class="notice-title">⚡ One-time Setup</div>
-    <p>
-      Go to <a href="https://rapidapi.com/Opachi/api/youtube-mp4-mp3-downloader" target="_blank">RapidAPI → Youtube MP4/MP3 Downloader</a>, subscribe free, then tap <strong>Headers(1)</strong> and copy your <code>x-rapidapi-key</code>. Paste it below — it saves in your browser.
-    </p>
-    <div class="config-row">
-      <span class="config-label">API Key:</span>
-      <input class="config-input" id="apiKey" type="password" placeholder="Paste your x-rapidapi-key here"/>
-    </div>
-  </div>
-
   <div class="preview-card" id="previewCard">
     <div class="preview-thumb" id="previewThumb">🎬</div>
     <div class="preview-info">
@@ -206,6 +176,7 @@
 </div>
 
 <script>
+  const API_KEY = 'd656abf480msh99b803e4e1dec56p137685jsn67cf073bcd06';
   const API_HOST = 'youtube-mp4-mp3-downloader.p.rapidapi.com';
 
   let selectedFormat = 'mp3';
@@ -218,15 +189,7 @@
     mp4: { options: ['360','480','720','1080'], labels: ['360p','480p','720p','1080p'], default: '720' },
   };
 
-  window.addEventListener('DOMContentLoaded', () => {
-    const saved = localStorage.getItem('ytgrab_apikey');
-    if (saved) document.getElementById('apiKey').value = saved;
-    renderQualities();
-  });
-
-  document.getElementById('apiKey').addEventListener('change', () => {
-    localStorage.setItem('ytgrab_apikey', document.getElementById('apiKey').value.trim());
-  });
+  window.addEventListener('DOMContentLoaded', () => renderQualities());
 
   function setFormat(fmt) {
     selectedFormat = fmt;
@@ -300,17 +263,14 @@
 
   function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-  function getHeaders(apiKey) {
-    return { 'x-rapidapi-key': apiKey, 'x-rapidapi-host': API_HOST };
+  function getHeaders() {
+    return { 'x-rapidapi-key': API_KEY, 'x-rapidapi-host': API_HOST };
   }
 
   async function startDownload() {
     const url = document.getElementById('urlInput').value.trim();
-    const apiKey = document.getElementById('apiKey').value.trim();
-
     if (!url) { showStatus('Please enter a YouTube URL.', 'error'); return; }
     if (!isValidYtUrl(url)) { showStatus("That doesn't look like a valid YouTube URL.", 'error'); return; }
-    if (!apiKey) { showStatus('Please enter your RapidAPI key above.', 'error'); return; }
 
     const videoId = extractVideoId(url);
     if (!videoId) { showStatus('Could not extract video ID from URL.', 'error'); return; }
@@ -322,17 +282,16 @@
     showProgress(10, 'Requesting...');
 
     try {
-      const fmt = selectedFormat === 'm4a' ? 'mp3' : selectedFormat; // API uses mp3 for audio
+      const fmt = selectedFormat === 'm4a' ? 'mp3' : selectedFormat;
       const quality = selectedFormat === 'mp4' ? (selectedQuality + 'p') : (selectedQuality || '128');
-      const ext = selectedFormat; // keep m4a label for filename
+      const ext = selectedFormat;
 
-      showStatus(`⏳ Converting... this can take 10–30 seconds.`, 'info');
+      showStatus('⏳ Converting... this can take 10–30 seconds.', 'info');
       showProgress(25, 'Converting...');
 
-      // Initial request
       const res = await fetch(
         `https://${API_HOST}/api/v1/download?id=${videoId}&format=${fmt}&quality=${quality}`,
-        { headers: getHeaders(apiKey) }
+        { headers: getHeaders() }
       );
 
       if (!res.ok) {
@@ -345,14 +304,12 @@
       let downloadUrl = data.link || data.url || data.downloadUrl || data.download_url;
       let title = data.title || 'download';
 
-      // If we got a job id, poll for it
       if (!downloadUrl && (data.id || data.jobId)) {
-        const jobId = data.id || data.jobId;
-        downloadUrl = await pollProgress(jobId, apiKey);
+        downloadUrl = await pollProgress(data.id || data.jobId);
         title = data.title || title;
       }
 
-      if (!downloadUrl) throw new Error('No download link returned. The API may have changed — check your key.');
+      if (!downloadUrl) throw new Error('No download link returned. Try again.');
 
       showProgress(90, 'Starting download...');
       hideStatus();
@@ -381,13 +338,13 @@
     }
   }
 
-  async function pollProgress(jobId, apiKey, attempts = 0) {
-    if (attempts > 20) throw new Error('Timed out waiting for conversion. Try again.');
+  async function pollProgress(jobId, attempts = 0) {
+    if (attempts > 20) throw new Error('Timed out. Try again.');
     showProgress(25 + attempts * 3, `Converting... (${attempts * 3}s)`);
 
     const res = await fetch(
       `https://${API_HOST}/api/v1/progress?id=${jobId}`,
-      { headers: getHeaders(apiKey) }
+      { headers: getHeaders() }
     );
 
     if (!res.ok) throw new Error(`Poll error ${res.status}`);
@@ -396,13 +353,10 @@
     const link = data.link || data.url || data.downloadUrl || data.download_url;
     if (link) return link;
 
-    const done = ['done','completed','finished','success'].includes((data.status||'').toLowerCase());
-    if (done && link) return link;
-
     const processing = ['processing','pending','converting','in_progress'].includes((data.status||'').toLowerCase());
     if (processing || !data.status) {
       await delay(3000);
-      return pollProgress(jobId, apiKey, attempts + 1);
+      return pollProgress(jobId, attempts + 1);
     }
 
     throw new Error('Conversion failed: ' + (data.message || data.status || 'unknown'));
